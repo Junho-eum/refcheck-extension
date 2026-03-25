@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>RefCheck — Library Manager</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px; color: #2d3748; background: #f0f4f8; min-height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      background: #fff; border-bottom: 1px solid #e2e8f0;
+      padding: 16px 32px; display: flex; align-items: center;
+      gap: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .logo {
+      width: 38px; height: 38px; border-radius: 9px;
+      background: linear-gradient(135deg,#2b6cb0,#2c5282);
+      display: flex; align-items: center; justify-content: center; font-size: 20px;
+    }
+    .header h1 { font-size: 17px; font-weight: 700; color: #1a202c; }
+    .header p  { font-size: 12px; color: #718096; margin-top: 1px; }
+
+    /* Layout */
+    .page { max-width: 860px; margin: 0 auto; padding: 28px 24px; }
+
+    /* Cards */
+    .card {
+      background: #fff; border: 1px solid #dde3ed;
+      border-radius: 10px; padding: 20px 22px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.07); margin-bottom: 18px;
+    }
+    .card-title {
+      font-size: 13px; font-weight: 700; color: #1a202c; margin-bottom: 4px;
+    }
+    .card-sub {
+      font-size: 12px; color: #718096; margin-bottom: 16px; line-height: 1.6;
+    }
+
+    /* Form */
+    .field { margin-bottom: 14px; }
+    label  { display: block; font-size: 11px; font-weight: 600; color: #4a5568;
+             text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; }
+    input, select {
+      width: 100%; padding: 9px 12px;
+      border: 1px solid #cbd5e0; border-radius: 7px;
+      font-size: 13px; font-family: inherit; color: #1a202c;
+      background: #f7fafc; outline: none;
+    }
+    input:focus, select:focus { border-color: #2b6cb0; background: #fff; }
+    input::placeholder { color: #a0aec0; }
+
+    .row { display: flex; gap: 12px; }
+    .row .field { flex: 1; }
+
+    /* Buttons */
+    .btn {
+      padding: 9px 20px; border-radius: 7px; font-size: 13px;
+      font-weight: 600; font-family: inherit; cursor: pointer; border: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg,#2b6cb0,#2c5282);
+      color: #fff; box-shadow: 0 2px 6px rgba(43,108,176,0.3);
+    }
+    .btn-primary:hover { background: linear-gradient(135deg,#2c5282,#1a365d); }
+    .btn-primary:disabled { background: #a0aec0; cursor: not-allowed; box-shadow: none; }
+    .btn-secondary {
+      background: #fff; color: #4a5568;
+      border: 1px solid #e2e8f0;
+    }
+    .btn-danger {
+      background: #fff5f5; color: #c53030;
+      border: 1px solid #feb2b2; font-size: 11px; padding: 5px 12px;
+    }
+    .btn-danger:hover { background: #fed7d7; }
+    .btn-move {
+      background: #ebf4ff; color: #2b6cb0;
+      border: 1px solid #90cdf4; font-size: 11px; padding: 5px 12px;
+    }
+    .btn-move:hover { background: #bee3f8; }
+
+    /* Status badges */
+    .badge {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      padding: 2px 7px; border-radius: 4px;
+    }
+    .badge-green  { background: #f0fff4; color: #276749; border: 1px solid #9ae6b4; }
+    .badge-blue   { background: #ebf4ff; color: #2b6cb0; border: 1px solid #90cdf4; }
+    .badge-amber  { background: #fffbeb; color: #b7791f; border: 1px solid #fbd38d; }
+    .badge-red    { background: #fff5f5; color: #c53030; border: 1px solid #feb2b2; }
+    .badge-gray   { background: #f7fafc; color: #718096; border: 1px solid #e2e8f0; }
+
+    /* Progress */
+    .progress-wrap { margin-bottom: 18px; display: none; }
+    .progress-header {
+      display: flex; justify-content: space-between;
+      font-size: 12px; color: #4a5568; margin-bottom: 6px; font-weight: 500;
+    }
+    .progress-bar { background: #e2e8f0; border-radius: 6px; height: 7px; overflow: hidden; }
+    .progress-fill {
+      height: 100%; border-radius: 6px;
+      background: linear-gradient(90deg,#2b6cb0,#276749);
+      transition: width 0.4s; width: 0%;
+    }
+    .progress-sub { font-size: 11px; color: #718096; margin-top: 5px; }
+
+    /* Log table */
+    .log-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .log-table th {
+      text-align: left; font-size: 10px; font-weight: 600; color: #718096;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 6px 10px; border-bottom: 1px solid #e2e8f0;
+    }
+    .log-table td {
+      padding: 8px 10px; border-bottom: 1px solid #f0f4f8;
+      vertical-align: top;
+    }
+    .log-table tr:last-child td { border-bottom: none; }
+    .log-title { font-weight: 500; color: #1a202c; }
+    .log-meta  { color: #718096; font-size: 11px; margin-top: 1px; }
+
+    /* Stats row */
+    .stats { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+    .stat-box {
+      background: #fff; border: 1px solid #dde3ed; border-radius: 8px;
+      padding: 12px 16px; flex: 1; min-width: 120px;
+    }
+    .stat-num  { font-size: 22px; font-weight: 700; color: #1a202c; }
+    .stat-lbl  { font-size: 11px; color: #718096; margin-top: 2px; }
+
+    /* Info box */
+    .info-box {
+      background: #ebf4ff; border: 1px solid #bee3f8;
+      border-radius: 8px; padding: 12px 14px; font-size: 12px;
+      color: #2c5282; line-height: 1.7; margin-bottom: 16px;
+    }
+    .info-box a { color: #2b6cb0; }
+
+    /* Empty state */
+    .empty { text-align: center; padding: 40px 20px; color: #a0aec0; font-size: 13px; }
+
+    /* Scrollable log */
+    .log-scroll { max-height: 420px; overflow-y: auto; }
+
+    /* Collection picker */
+    .coll-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 14px; cursor: pointer; user-select: none;
+    }
+    .coll-item:hover { background: #f7fafc; }
+    .coll-item input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; accent-color: #2b6cb0; }
+    .coll-name  { font-size: 13px; color: #1a202c; font-weight: 500; }
+    .coll-count { font-size: 11px; color: #718096; margin-left: auto; }
+    .coll-group-header {
+      padding: 6px 14px; font-size: 10px; font-weight: 700; color: #718096;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      background: #f7fafc; border-bottom: 1px solid #e2e8f0;
+    }
+
+    /* Project tag */
+    .project-tag {
+      display: inline-block; font-size: 10px; font-weight: 600;
+      padding: 2px 7px; border-radius: 4px;
+      background: #ebf4ff; color: #2b6cb0; border: 1px solid #90cdf4;
+    }
+
+    /* Move dropdown */
+    .move-select {
+      padding: 4px 8px; font-size: 11px; border: 1px solid #cbd5e0;
+      border-radius: 5px; background: #fff; color: #1a202c;
+      cursor: pointer; width: auto; min-width: 100px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <img src="icons/icon-48.png" alt="RefCheck" style="width:38px;height:38px;border-radius:9px;">
+  <div>
+    <h1>RefCheck — Library Manager</h1>
+    <p>Sync your Zotero library into Supabase for citation matching</p>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- Supabase Key Setup -->
+  <div class="card" id="supabase-setup">
+    <div class="card-title">Supabase Credentials</div>
+    <div class="card-sub">
+      Your Supabase publishable (anon) key. This is stored locally in your browser — never shared.
+    </div>
+    <div class="field">
+      <label>Supabase Anon Key</label>
+      <div style="display:flex;gap:8px;">
+        <input type="password" id="supabase-key-input" placeholder="sb_publishable_…" style="flex:1" />
+        <button class="btn btn-primary" id="save-supabase-btn">Save Key</button>
+      </div>
+    </div>
+    <span id="supabase-key-status" style="font-size:12px;"></span>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-box">
+      <div class="stat-num" id="stat-total">—</div>
+      <div class="stat-lbl">Papers in Project</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" id="stat-full">—</div>
+      <div class="stat-lbl">Full PDF extracts</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" id="stat-abstract">—</div>
+      <div class="stat-lbl">Abstract only</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" id="stat-zotero">—</div>
+      <div class="stat-lbl">Zotero items found</div>
+    </div>
+  </div>
+
+  <!-- Projects -->
+  <div class="card">
+    <div class="card-title">Projects</div>
+    <div class="card-sub">
+      Organize papers into projects. Each project is a named group within your Supabase "papers" table.
+      Synced papers go into the selected project. You can move papers between projects below.
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:14px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:180px;">
+        <label>Active Project</label>
+        <select id="project-select" style="cursor:pointer;"></select>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+      <div class="field" style="flex:1;min-width:160px;margin-bottom:0;">
+        <label>Create New Project</label>
+        <input type="text" id="new-project-name" placeholder="e.g. Thesis Chapter 2" />
+      </div>
+      <button class="btn btn-primary" id="add-project-btn" style="height:38px;white-space:nowrap;">+ Create Project</button>
+    </div>
+
+    <div id="project-list-manage" style="margin-top:12px;"></div>
+  </div>
+
+  <!-- Credentials -->
+  <div class="card">
+    <div class="card-title">Zotero Credentials</div>
+    <div class="card-sub">
+      Get your API key at <a href="https://www.zotero.org/settings/keys" target="_blank">zotero.org/settings/keys</a> →
+      Create new private key → enable Library access (Read Only) + File access.
+      Your User ID is shown on that same page.
+    </div>
+
+    <div class="info-box">
+      ℹ️ Enter your API key and click <b>Verify & Load</b> — your numeric User ID and collections are fetched automatically.
+      PDFs are downloaded from Zotero cloud. Papers without PDFs fall back to abstract extraction.
+      Better BibTeX citation keys are read automatically from the Extra field.
+    </div>
+
+    <div class="field">
+      <label>Zotero API Key</label>
+      <div style="display:flex;gap:8px;">
+        <input type="password" id="zotero-api-key" placeholder="Your private API key" style="flex:1" />
+        <button class="btn btn-secondary" id="verify-btn">Verify & Load →</button>
+      </div>
+    </div>
+    <div class="field" id="user-id-field" style="display:none">
+      <label>Zotero User ID <span style="font-weight:400;text-transform:none;color:#276749">(auto-detected)</span></label>
+      <input type="text" id="zotero-user-id" readonly style="background:#f0fff4;border-color:#9ae6b4;color:#276749;" />
+    </div>
+    <div class="field">
+      <label>Group Library ID <span style="font-weight:400;text-transform:none;color:#a0aec0">(optional — numeric ID from zotero.org/groups/…)</span></label>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="zotero-group-id" placeholder="e.g. 4512345" style="flex:1" />
+        <button class="btn btn-secondary" id="load-group-btn">Load Group →</button>
+      </div>
+    </div>
+    <span id="creds-status" style="font-size:12px;"></span>
+  </div>
+
+  <!-- Collection picker -->
+  <div class="card" id="collections-card" style="display:none">
+    <div class="card-title">Select Collections to Sync</div>
+    <div class="card-sub">Choose specific collections, or leave all unchecked to sync your entire library.</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button class="btn btn-secondary" id="check-all-btn" style="font-size:12px;padding:5px 12px;">Check All</button>
+      <button class="btn btn-secondary" id="uncheck-all-btn" style="font-size:12px;padding:5px 12px;">Uncheck All</button>
+    </div>
+    <div id="collections-list" style="max-height:300px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:7px;padding:4px 0;"></div>
+  </div>
+
+  <!-- Sync -->
+  <div class="card">
+    <div class="card-title">Sync Library</div>
+    <div class="card-sub">
+      Downloads PDFs from Zotero cloud, extracts findings via Claude, and saves to the <b>active project</b>.
+      Already-extracted papers are skipped automatically.
+    </div>
+
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+      <button class="btn btn-primary" id="sync-btn">⟳ Sync Selected Collections</button>
+      <button class="btn btn-secondary" id="stop-btn" style="display:none;">⬛ Stop</button>
+      <button class="btn btn-secondary" id="refresh-btn">↺ Refresh Stats</button>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-header">
+        <span id="progress-label">Fetching library…</span>
+        <span id="progress-pct">0%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div class="progress-sub" id="progress-sub"></div>
+    </div>
+
+    <!-- Log -->
+    <div id="log-wrap" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:11px;font-weight:600;color:#718096;text-transform:uppercase;letter-spacing:0.05em;">
+          Processing Log
+        </span>
+        <span id="log-summary" style="font-size:12px;color:#4a5568;"></span>
+      </div>
+      <div class="log-scroll">
+        <table class="log-table">
+          <thead>
+            <tr>
+              <th>Paper</th>
+              <th>Source</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="log-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Project Library -->
+  <div class="card">
+    <div class="card-title" id="db-library-title">Project Library</div>
+    <div class="card-sub">Papers in the active project. Use "Move to" to transfer papers between projects.</div>
+    <div id="db-list">
+      <div class="empty">Loading…</div>
+    </div>
+  </div>
+
+</div>
+
+<script src="config.js"></script>
+<script src="options.js"></script>
+</body>
+</html>

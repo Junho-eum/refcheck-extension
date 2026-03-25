@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RefCheck</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+      color: #2d3748;
+      background: #f7fafc;
+      min-height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .logo {
+      width: 28px; height: 28px;
+      background: linear-gradient(135deg,#2b6cb0,#2c5282);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; flex-shrink: 0;
+    }
+    .header-title { font-weight: 700; font-size: 14px; color: #1a202c; }
+    .header-sub   { font-size: 11px; color: #718096; }
+
+    /* API key setup */
+    .setup-box {
+      margin: 12px;
+      background: #ebf4ff;
+      border: 1px solid #bee3f8;
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .setup-box label { font-size: 11px; font-weight: 600; color: #2b6cb0; display: block; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .setup-box input {
+      width: 100%; padding: 8px 10px;
+      border: 1px solid #cbd5e0; border-radius: 6px;
+      font-size: 12px; font-family: inherit; outline: none;
+      background: #fff; color: #1a202c; margin-bottom: 8px;
+    }
+    .setup-box input:focus { border-color: #2b6cb0; }
+    .btn-save {
+      width: 100%; padding: 8px;
+      background: linear-gradient(135deg,#2b6cb0,#2c5282);
+      color: #fff; border: none; border-radius: 6px;
+      font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer;
+    }
+
+    /* Analysis controls */
+    .analysis-controls {
+      margin: 12px;
+      background: #fff;
+      border: 1px solid #dde3ed;
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    /* Selected text preview */
+    .selected-preview {
+      margin: 12px;
+      background: #fff;
+      border: 1px solid #dde3ed;
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .preview-label { font-size: 10px; font-weight: 600; color: #718096; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; }
+    .preview-text  { font-size: 12px; color: #1a202c; line-height: 1.6; font-style: italic; }
+
+    /* Progress */
+    .progress-box {
+      margin: 0 12px 12px;
+      background: #fff;
+      border: 1px solid #dde3ed;
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .progress-label { font-size: 11px; color: #2d3748; margin-bottom: 6px; font-weight: 500; }
+    .progress-bar { background: #e2e8f0; border-radius: 4px; height: 5px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg,#2b6cb0,#276749); border-radius: 4px; transition: width 0.3s; }
+    .progress-sub  { font-size: 10px; color: #718096; margin-top: 4px; }
+
+    /* Empty state */
+    .empty {
+      text-align: center; padding: 50px 20px; color: #a0aec0;
+    }
+    .empty .icon { font-size: 32px; margin-bottom: 10px; }
+    .empty p { font-size: 12px; line-height: 1.6; }
+
+    /* Result cards */
+    .result-card {
+      margin: 0 10px 8px;
+      background: #fff;
+      border: 1px solid #dde3ed;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .result-header {
+      padding: 12px 12px;
+      display: flex; align-items: flex-start; gap: 10px;
+      cursor: pointer;
+    }
+
+    /* Score box with label */
+    .score-wrap { flex-shrink: 0; text-align: center; }
+    .score-box {
+      width: 42px; height: 42px;
+      border-radius: 9px; display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 18px;
+    }
+    .score-label {
+      font-size: 9px; font-weight: 600; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.03em;
+    }
+
+    .result-meta { flex: 1; min-width: 0; }
+    .result-title { font-weight: 600; font-size: 12px; color: #1a202c; line-height: 1.4; margin-bottom: 3px; }
+    .result-authors { font-size: 11px; color: #718096; margin-bottom: 5px; }
+
+    /* Citation key as full-width reference badge */
+    .cite-badge {
+      display: block;
+      font-family: monospace; font-size: 10px;
+      background: #f7fafc; border: 1px solid #e2e8f0;
+      color: #2b6cb0; padding: 3px 7px; border-radius: 4px;
+      margin-bottom: 5px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .result-finding { font-size: 11px; color: #4a5568; line-height: 1.5; }
+    .chevron { color: #a0aec0; font-size: 10px; flex-shrink: 0; padding-top: 4px; }
+
+    /* Source badge */
+    .source-badge {
+      display: inline-block; font-size: 9px; font-weight: 700;
+      padding: 2px 5px; border-radius: 3px; margin-left: 5px;
+      vertical-align: middle;
+    }
+
+    /* Expanded */
+    .result-expanded {
+      padding: 0 12px 14px;
+      border-top: 1px solid #edf2f7;
+    }
+
+    /* Key findings section */
+    .section-label {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; margin-top: 12px; margin-bottom: 6px; display: block;
+    }
+    .finding-item {
+      display: flex; gap: 8px; margin-bottom: 5px;
+    }
+    .finding-dot { color: #2b6cb0; font-weight: 700; flex-shrink: 0; }
+    .finding-text { font-size: 12px; color: #2d3748; line-height: 1.6; }
+
+    /* Match cards */
+    .match-card {
+      margin-bottom: 8px;
+      border-radius: 7px;
+      padding: 9px 11px;
+    }
+    .match-score-badge {
+      display: inline-block; font-size: 10px; font-weight: 600;
+      padding: 2px 7px; border-radius: 3px; margin-bottom: 5px;
+    }
+    .match-sentence { font-size: 12px; font-style: italic; color: #2d3748; margin-bottom: 4px; }
+    .match-note     { font-size: 11px; color: #718096; line-height: 1.6; }
+
+    /* Actions */
+    .card-actions {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px;
+    }
+    .open-link {
+      font-size: 11px; color: #2b6cb0; text-decoration: none; font-weight: 500;
+    }
+    .open-link:hover { text-decoration: underline; }
+    .copy-btn {
+      font-size: 11px; color: #276749; cursor: pointer;
+      background: #f0fff4; border: 1px solid #9ae6b4;
+      padding: 3px 9px; border-radius: 4px; font-family: inherit; font-weight: 500;
+    }
+    .copy-btn:hover { background: #c6f6d5; }
+
+    /* Footer */
+    .footer {
+      padding: 10px 12px; text-align: center; font-size: 10px; color: #a0aec0;
+      border-top: 1px solid #e2e8f0; margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <img src="icons/icon-48.png" alt="RefCheck" style="width:28px;height:28px;border-radius:6px;">
+    <div>
+      <div class="header-title">RefCheck</div>
+      <div class="header-sub" id="header-sub">Highlight text in Overleaf to get suggestions</div>
+    </div>
+  </div>
+
+  <!-- API Key setup (shown if no key saved) -->
+  <div class="setup-box" id="setup-box" style="display:none">
+    <label>Anthropic API Key</label>
+    <input type="password" id="api-key-input" placeholder="sk-ant-api03-…" />
+    <button class="btn-save" id="save-key-btn">Save Key</button>
+    <div id="key-status" style="font-size:11px;margin-top:6px;"></div>
+  </div>
+
+  <!-- Analysis controls (shown when text is pending) -->
+  <div class="analysis-controls" id="analysis-controls" style="display:none">
+    <div class="preview-label">Selected Text</div>
+    <div class="preview-text" id="pending-preview-text"></div>
+    <div style="margin-top:10px;">
+      <label style="font-size:10px;font-weight:600;color:#718096;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px;display:block;">Project</label>
+      <select id="project-select" style="width:100%;padding:8px 10px;border:1px solid #cbd5e0;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1a202c;outline:none;margin-bottom:10px;cursor:pointer;">
+        <option value="Default">Default</option>
+      </select>
+    </div>
+    <button class="btn-save" id="start-analysis-btn" style="width:100%;padding:10px;font-size:13px;">Start Analysis</button>
+  </div>
+
+  <!-- Selected text preview (shown during analysis) -->
+  <div class="selected-preview" id="preview-box" style="display:none">
+    <div class="preview-label">Analyzing</div>
+    <div class="preview-text" id="preview-text"></div>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-box" id="progress-box" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div class="progress-label" id="progress-label" style="margin-bottom:0;">Searching library…</div>
+      <button id="stop-analysis-btn" style="font-size:11px;padding:3px 10px;background:#fff5f5;color:#c53030;border:1px solid #feb2b2;border-radius:5px;cursor:pointer;font-family:inherit;font-weight:600;">Stop</button>
+    </div>
+    <div class="progress-bar" style="margin-top:6px;"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    <div class="progress-sub" id="progress-sub"></div>
+  </div>
+
+  <!-- Empty state -->
+  <div class="empty" id="empty-state">
+    <div class="icon">💡</div>
+    <p>Highlight any sentence or phrase in Overleaf, then right-click → <b>Suggest References</b>.</p>
+  </div>
+
+  <!-- Results -->
+  <div id="results-container"></div>
+
+  <!-- Footer -->
+  <div class="footer" id="footer" style="display:none">
+    <span id="footer-text"></span>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="sidebar.js"></script>
+</body>
+</html>

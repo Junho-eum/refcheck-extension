@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "RefCheck — Suggest References",
+  "version": "0.1.0",
+  "description": "Highlight text in Overleaf and get instant reference suggestions from your Zotero library.",
+  "permissions": [
+    "contextMenus",
+    "storage",
+    "activeTab",
+    "scripting",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "https://www.overleaf.com/*",
+    "https://api.anthropic.com/*",
+    "https://*.supabase.co/*",
+    "https://api.zotero.org/*",
+    "https://*.zotero.org/*",
+    "https://*.amazonaws.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.overleaf.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "side_panel": {
+    "default_path": "sidebar.html"
+  },
+  "action": {
+    "default_title": "RefCheck"
+  },
+  "options_page": "options.html",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  }
+}
