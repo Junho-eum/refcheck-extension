@@ -2,6 +2,7 @@
 
 const ZOTERO = "https://api.zotero.org";
 let stopRequested = false;
+let skipRequested = false;
 let loadedCollections = []; // { key, name, libType, libId, count }
 let projects = []; // [{ id, name }] from Supabase projects table
 
@@ -469,6 +470,10 @@ async function claudeWithRetry(body, anthropicKey, maxRetries = 5) {
 async function extractFromPdf(base64, paper, anthropicKey) {
   const prompt = `You are a research assistant. Read this full academic paper and extract its core content for future citation matching.
 
+CRITICAL: The "verbatimQuotes" field must contain EXACT sentences or phrases copied character-for-character from the paper. These will be used for Ctrl+F search in the PDF. Do NOT paraphrase or summarize — copy the text exactly as it appears, preserving original wording, punctuation, and spelling.
+
+PRIORITY for verbatimQuotes: Focus heavily on the RESULTS and DISCUSSION sections. These contain the paper's actual evidence — specific data points, statistical findings, key outcomes, and interpretive claims. Also include 1-2 quotes from the abstract or conclusion that state the paper's main contribution. Avoid generic methodology descriptions or literature review sentences.
+
 Return ONLY this JSON object — no other text:
 {
   "findings": [
@@ -477,6 +482,15 @@ Return ONLY this JSON object — no other text:
     "Detailed finding or argument 3 (2-3 sentences)",
     "Detailed finding or argument 4 (2-3 sentences)",
     "Detailed finding or argument 5 (2-3 sentences)"
+  ],
+  "verbatimQuotes": [
+    "Exact sentence from RESULTS section stating a key quantitative or qualitative finding",
+    "Another exact sentence from RESULTS with specific data, statistics, or outcomes",
+    "Exact sentence from RESULTS or DISCUSSION with an important interpretive claim",
+    "Exact sentence from DISCUSSION stating a key implication or contribution",
+    "Exact sentence from RESULTS with another significant finding or comparison",
+    "Exact sentence from ABSTRACT or CONCLUSION stating the paper's main claim",
+    "Another exact sentence from RESULTS with supporting evidence"
   ],
   "methodology": "Brief description of study design, participants, methods used",
   "keyArguments": [
@@ -495,7 +509,7 @@ Return ONLY this JSON object — no other text:
   const data = await claudeWithRetry(
     {
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 1500,
+      max_tokens: 2500,
       messages: [
         {
           role: "user",
@@ -524,12 +538,15 @@ Return ONLY this JSON object — no other text:
 async function extractFromAbstract(abstract, paper, anthropicKey) {
   const prompt = `You are a research assistant. Based on this paper's abstract, extract its core content for citation matching.
 
+CRITICAL: The "verbatimQuotes" field must contain EXACT phrases copied character-for-character from the abstract. These will be used for Ctrl+F search. Do NOT paraphrase — copy the text exactly as written.
+
 PAPER: "${paper.title}" (${paper.authors.join(", ")}, ${paper.year})
 ABSTRACT: ${abstract}
 
 Return ONLY this JSON object:
 {
   "findings": ["Key finding 1", "Key finding 2", "Key finding 3"],
+  "verbatimQuotes": ["Exact sentence from the abstract", "Another exact sentence from the abstract", "Another exact sentence from the abstract"],
   "methodology": "Brief description of methods if mentioned",
   "keyArguments": ["Core argument 1", "Core argument 2"],
   "citationUses": ["Can cite to support claims about X", "Can cite to support claims about Y"]
@@ -772,8 +789,10 @@ async function runSync() {
   }
 
   stopRequested = false;
+  skipRequested = false;
   document.getElementById("sync-btn").disabled = true;
   document.getElementById("stop-btn").style.display = "inline-block";
+  document.getElementById("skip-btn").style.display = "inline-block";
   document.getElementById("log-body").innerHTML = "";
   document.getElementById("log-wrap").style.display = "none";
 
@@ -854,6 +873,12 @@ async function runSync() {
 
     for (let i = 0; i < total; i++) {
       if (stopRequested) break;
+
+      // Check if skip was requested for previous paper
+      if (skipRequested) {
+        skipRequested = false;
+      }
+
       const item = allItems[i];
       const pct = Math.round(((i + 1) / total) * 100);
       setProgress(
@@ -863,18 +888,41 @@ async function runSync() {
       );
 
       try {
-        const result = await processItem(
-          item,
-          item._libType,
-          item._libId,
-          userId,
-          zoteroKey,
-          anthropicKey,
-          existingPdf,
-          existingAll,
-        );
-        if (result === "pdf" || result === "abstract") done++;
-        else skipped++;
+        // Wrap processItem in a race with skip detection
+        const result = await Promise.race([
+          processItem(
+            item,
+            item._libType,
+            item._libId,
+            userId,
+            zoteroKey,
+            anthropicKey,
+            existingPdf,
+            existingAll,
+          ),
+          new Promise((resolve) => {
+            const check = setInterval(() => {
+              if (skipRequested || stopRequested) {
+                clearInterval(check);
+                resolve("skipped");
+              }
+            }, 200);
+            // Clean up interval when processItem finishes first
+            setTimeout(() => clearInterval(check), 300000);
+          }),
+        ]);
+
+        if (result === "skipped" || skipRequested) {
+          skipRequested = false;
+          const title = item.data.title || item.key;
+          const cKey = parseCitationKey(item.data.extra) || generateCitationKey(item);
+          addLogRow(title, `@${cKey}`, "Skipped by user", "skip");
+          skipped++;
+        } else if (result === "pdf" || result === "abstract") {
+          done++;
+        } else {
+          skipped++;
+        }
       } catch (e) {
         console.error(e);
         addLogRow(
@@ -887,7 +935,7 @@ async function runSync() {
       }
 
       updateLogSummary(done, skipped, failed, i + 1);
-      await new Promise((r) => setTimeout(r, 3000));
+      await new Promise((r) => setTimeout(r, 6000));
     }
 
     setProgress(
@@ -902,6 +950,7 @@ async function runSync() {
 
   document.getElementById("sync-btn").disabled = false;
   document.getElementById("stop-btn").style.display = "none";
+  document.getElementById("skip-btn").style.display = "none";
   await renderDbList();
 }
 
@@ -999,6 +1048,10 @@ async function renderDbList() {
 
 // ── Wire up ───────────────────────────────────────────────────────────────────
 document.getElementById("sync-btn").addEventListener("click", runSync);
+document.getElementById("skip-btn").addEventListener("click", () => {
+  skipRequested = true;
+  document.getElementById("progress-sub").textContent = "Skipping current paper…";
+});
 document.getElementById("stop-btn").addEventListener("click", () => {
   stopRequested = true;
   document.getElementById("stop-btn").disabled = true;

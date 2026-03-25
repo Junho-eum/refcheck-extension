@@ -479,12 +479,13 @@ function renderResults(results) {
 
     if (matches.length > 0) {
       body.innerHTML += `<span class="section-label" style="color:#276749;">Matches</span>`;
-      matches.forEach((m) => {
+      matches.forEach((m, mi) => {
         body.innerHTML += `
           <div class="match-card" style="background:${SBg(m.score)};border:1px solid ${SBo(m.score)}">
             <span class="match-score-badge" style="background:${SBg(m.score)};color:${SC(m.score)};border:1px solid ${SBo(m.score)}">${m.score}/10</span>
             <div class="match-sentence">"${esc(m.sentence)}"</div>
             <div class="match-note">${esc(m.citationNote)}</div>
+            <div class="find-evidence-container" data-ridx="${idx}" data-midx="${mi}" style="margin-top:6px;"></div>
           </div>`;
       });
     }
@@ -517,9 +518,167 @@ function renderResults(results) {
     actionsDiv.appendChild(copyBtn);
     body.appendChild(actionsDiv);
 
+    // Wire up "Find in Paper" buttons
+    body.querySelectorAll(".find-evidence-container").forEach((container) => {
+      const rIdx = parseInt(container.dataset.ridx);
+      const mIdx = parseInt(container.dataset.midx);
+      const match = results[rIdx].sentenceMatches.filter((m) => m.score >= 3).sort((a, b) => b.score - a.score)[mIdx];
+      const row = results[rIdx].row;
+
+      const findBtn = document.createElement("button");
+      findBtn.textContent = "🔍 Find in Paper";
+      Object.assign(findBtn.style, {
+        fontSize: "10px", padding: "4px 10px", background: "#ebf4ff",
+        color: "#2b6cb0", border: "1px solid #90cdf4", borderRadius: "4px",
+        cursor: "pointer", fontFamily: "inherit", fontWeight: "600",
+      });
+      findBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        findBtn.disabled = true;
+        findBtn.textContent = "Searching…";
+        try {
+          const phrases = await findExactPhrases(row, match);
+          renderFoundPhrases(container, phrases);
+        } catch (err) {
+          container.innerHTML = `<div style="font-size:11px;color:#c53030;margin-top:4px;">Failed: ${esc(err.message)}</div>`;
+        }
+      });
+      container.appendChild(findBtn);
+    });
+
     card.appendChild(header);
     card.appendChild(body);
     container.appendChild(card);
+  });
+}
+
+// ── Find exact phrases from paper via Claude ────────────────────────────────
+async function findExactPhrases(row, match) {
+  const verbatimQuotes = (row.findings?.verbatimQuotes || []).filter(Boolean);
+  const hasVerbatim = verbatimQuotes.length > 0;
+
+  const summaryText = [
+    ...(row.findings?.findings || []),
+    ...(row.findings?.keyArguments || []),
+    ...(row.findings?.citationUses || []),
+    row.findings?.methodology || "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  let prompt;
+
+  if (hasVerbatim) {
+    // Papers with verbatim quotes — Claude picks from real text
+    const quotesBlock = verbatimQuotes
+      .map((q, i) => `[${i + 1}] "${q}"`)
+      .join("\n");
+
+    prompt = `You have EXACT VERBATIM QUOTES extracted from an academic paper, plus a summary of findings. A user wants to Ctrl+F in the PDF to find relevant sections.
+
+PAPER: "${row.title}" (${(row.authors || []).join(", ")}, ${row.year})
+
+VERBATIM QUOTES FROM THE PAPER (these appear exactly in the PDF):
+${quotesBlock}
+
+SUMMARY OF FINDINGS:
+${summaryText}
+
+THE USER'S TEXT BEING SUPPORTED:
+"${match.sentence}"
+
+HOW THE PAPER SUPPORTS IT:
+${match.citationNote}
+
+YOUR TASK: Pick the 2-3 most relevant VERBATIM QUOTES above that relate to this match. Return them as COMPLETE, READABLE sentences — do NOT shorten or fragment them. Copy them exactly as they appear above. The user will read these to understand the evidence and also use them for Ctrl+F in the PDF.
+
+Return ONLY this JSON — no other text:
+{ "phrases": ["full verbatim sentence 1", "full verbatim sentence 2"], "confidence": "high" }`;
+  } else {
+    // Papers without verbatim quotes — best effort from summaries
+    prompt = `You have SUMMARIZED findings from an academic paper (not verbatim text). A user wants to Ctrl+F in the PDF to find relevant sections. Since these are summaries, focus on specific technical terms, proper nouns, statistics, method names, and distinctive jargon that the authors almost certainly used verbatim.
+
+PAPER: "${row.title}" (${(row.authors || []).join(", ")}, ${row.year})
+
+SUMMARIZED FINDINGS (not exact quotes):
+${summaryText}
+
+THE USER'S TEXT BEING SUPPORTED:
+"${match.sentence}"
+
+HOW THE PAPER SUPPORTS IT:
+${match.citationNote}
+
+YOUR TASK: Identify 3-4 SHORT search terms (2-8 words) that are most likely to appear verbatim in the original paper. Focus on:
+- Specific numbers, percentages, or statistics mentioned (e.g. "63% of", "N=42")
+- Technical method names (e.g. "structural equation modeling", "thematic analysis")
+- Distinctive compound terms or jargon (e.g. "privacy fatigue", "selective disclosure")
+- Named frameworks, scales, or theories (e.g. "Technology Acceptance Model", "System Usability Scale")
+- Proper nouns (country names, tool names, author names referenced)
+
+Do NOT generate full sentences — keep phrases short and specific.
+
+Return ONLY this JSON — no other text:
+{ "phrases": ["search term 1", "search term 2", "search term 3", "search term 4"], "confidence": "low" }`;
+  }
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: CONFIG.MODEL,
+      max_tokens: 400,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const data = await res.json();
+  const txt = data.content?.map((c) => c.text || "").join("") || "";
+  const jsonMatch = txt.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("No JSON in response");
+  const parsed = JSON.parse(jsonMatch[0]);
+  return {
+    phrases: parsed.phrases || [],
+    confidence: parsed.confidence || (hasVerbatim ? "high" : "low"),
+  };
+}
+
+function renderFoundPhrases(container, result) {
+  const { phrases, confidence } = result;
+  const isHigh = confidence === "high";
+  const borderColor = isHigh ? "#9ae6b4" : "#fbd38d";
+  const labelColor = isHigh ? "#276749" : "#b7791f";
+  const labelText = isHigh
+    ? "Search phrases — from paper text"
+    : "Search phrases — approximate (re-sync paper for exact matches)";
+
+  let html = `<div style="padding:6px 9px;background:rgba(255,255,255,0.6);border-left:3px solid ${borderColor};border-radius:0 4px 4px 0;font-size:11px;color:#2d3748;line-height:1.6;">
+    <span style="font-size:9px;font-weight:600;color:${labelColor};text-transform:uppercase;letter-spacing:0.05em;">${labelText}</span>`;
+  phrases.forEach((phrase) => {
+    html += `<div class="phrase-copy" data-phrase="${esc(phrase)}" style="margin-top:4px;padding:4px 8px;background:#f7fafc;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer;font-family:monospace;font-size:11px;display:flex;justify-content:space-between;align-items:center;">
+      <span>${esc(phrase)}</span>
+      <span style="font-size:9px;color:#2b6cb0;margin-left:8px;flex-shrink:0;">copy</span>
+    </div>`;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+
+  container.querySelectorAll(".phrase-copy").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(el.dataset.phrase).then(() => {
+        el.querySelector("span:last-child").textContent = "✓";
+        setTimeout(() => {
+          el.querySelector("span:last-child").textContent = "copy";
+        }, 1500);
+      });
+    });
   });
 }
 
